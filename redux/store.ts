@@ -6,6 +6,7 @@ import { doctorsApi } from "./api/doctorsApi";
 import { patientsApi } from "./api/patientsApi";
 import { diagnosisApi } from "./api/diagnosisApi";
 import { documentsApi } from "./api/documentsApi";
+import { auditlogsApi } from "./api/audit-logsApi";
 
 export const store = configureStore({
     reducer: {
@@ -16,7 +17,8 @@ export const store = configureStore({
         [patientsApi.reducerPath]: patientsApi.reducer,
         [diagnosisApi.reducerPath]: diagnosisApi.reducer,
         [documentsApi.reducerPath]: documentsApi.reducer,
+        [auditlogsApi.reducerPath]: auditlogsApi.reducer,
     },
-    middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(authApi.middleware, departmentsApi.middleware, usersApi.middleware, doctorsApi.middleware, patientsApi.middleware, diagnosisApi.middleware, documentsApi.middleware),
+    middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(authApi.middleware, departmentsApi.middleware, usersApi.middleware, doctorsApi.middleware, patientsApi.middleware, diagnosisApi.middleware, documentsApi.middleware, auditlogsApi.middleware),
     devTools: true,
 })
