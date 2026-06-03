@@ -1,24 +1,63 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import { StatsCard } from '@/components/dashboard/stats-card'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { mockDoctors, mockPatients, mockDiagnoses, mockDepartments } from '@/lib/mock-data'
+import { useGetDoctorsQuery } from '@/redux/api/doctorsApi'
+import { useGetPatientsQuery } from '@/redux/api/patientsApi'
+import { useGetDepartmentsQuery } from '@/redux/api/departmentsApi'
+import { useGetAuditLogsQuery } from '@/redux/api/audit-logsApi'
+import { useGetDiagnosesQuery } from '@/redux/api/diagnosisApi'
 
 export default function DashboardPage() {
   const { user } = useAuth()
+  const [isMounted, setIsMounted] = useState(false)
 
-  const totalDoctors = mockDoctors.length
-  const totalPatients = mockPatients.length
-  const admittedPatients = mockPatients.filter((p) => p.status === 'admitted').length
-  const activeDiagnoses = mockDiagnoses.filter((d) => d.status !== 'resolved').length
+  // Hydration mismatch xatosini oldini olish
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
-  const availableDoctors = mockDoctors.filter((d) => d.availability === 'available').length
-  const availableBeds = mockDepartments.reduce(
-    (acc, dept) => acc + (dept.beds - dept.bedsOccupied),
-    0
-  )
+  // API so'rovlari va Loading holatlarini ushlash
+  const { data: doctorsData, isLoading: isDoctorsLoading } = useGetDoctorsQuery({})
+  const { data: patientsData, isLoading: isPatientsLoading } = useGetPatientsQuery({})
+  const { data: diagnosesData, isLoading: isDiagnosesLoading } = useGetDiagnosesQuery({})
+  const { data: departmentsData, isLoading: isDepsLoading } = useGetDepartmentsQuery({})
+  const { data: auditLogsData, isLoading: isLogsLoading } = useGetAuditLogsQuery({})
+
+  const isLoading = isDoctorsLoading || isPatientsLoading || isDiagnosesLoading || isDepsLoading || isLogsLoading
+  // API javobini qat'iy Array qilib olish (.map va .filter xato bermasligi uchun)
+  const getSafeArray = (data: unknown): any[] => {
+    // Handle responses like { data: [...] } or raw arrays, otherwise return empty array
+    if (Array.isArray((data as any)?.data)) return (data as any).data as any[]
+    if (Array.isArray(data)) return data as any[]
+    return []
+  }
+
+  const doctors = getSafeArray(doctorsData)
+  const patients = getSafeArray(patientsData)
+  const diagnoses = getSafeArray(diagnosesData)
+  const departments = getSafeArray(departmentsData)
+  const auditLogs = getSafeArray(auditLogsData)
+
+  const totalDoctors = doctors.length
+  const totalPatients = patients.length
+  const availableDoctors = doctors.filter((d) => d?.availability === 'available').length
+  const activeDiagnoses = diagnoses.filter((d) => d?.status !== 'resolved').length
+
+  // Client-side render bo'lguncha hech narsa ko'rsatmaslik
+  if (!isMounted) return null
+
+  // Ma'lumotlar yuklanayotganda kutilish ekrani
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <p className="text-muted-foreground animate-pulse">Ma'lumotlar yuklanmoqda...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
@@ -48,7 +87,7 @@ export default function DashboardPage() {
         <StatsCard
           label="Total Patients"
           value={totalPatients}
-          change={`${admittedPatients} admitted`}
+          change={`${patients.length} registered`}
           changeType="negative"
           icon={
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,9 +107,9 @@ export default function DashboardPage() {
           }
         />
         <StatsCard
-          label="Available Beds"
-          value={availableBeds}
-          change="Total beds: 180"
+          label="Departments"
+          value={departments.length}
+          change="Active departments"
           changeType="positive"
           icon={
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -85,39 +124,35 @@ export default function DashboardPage() {
         <Card className="lg:col-span-2 border-border/50">
           <CardHeader>
             <CardTitle>Recent Patients</CardTitle>
-            <CardDescription>Latest patient admissions and updates</CardDescription>
+            <CardDescription>Latest patient registrations</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {mockPatients.slice(0, 5).map((patient) => (
+              {patients.slice(0, 5).map((patient) => (
                 <div
                   key={patient.id}
                   className="flex items-start justify-between p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-foreground truncate">
-                      {patient.name}
+                      {patient.first_name} {patient.last_name}
                     </h3>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className="text-xs text-muted-foreground">
-                        ID: {patient.medicalId}
+                        {patient.blood_type || 'N/A'}
+                      </span>
+                      <span className="text-xs text-muted-foreground">•</span>
+                      <span className="text-xs text-muted-foreground capitalize">
+                        {patient.gender || 'N/A'}
                       </span>
                       <span className="text-xs text-muted-foreground">•</span>
                       <span className="text-xs text-muted-foreground">
-                        {patient.age} years
+                        {patient.phone || 'No phone'}
                       </span>
                     </div>
                   </div>
-                  <Badge
-                    className={
-                      patient.status === 'admitted'
-                        ? 'bg-blue-500/20 text-blue-700 dark:text-blue-400'
-                        : patient.status === 'active'
-                        ? 'bg-green-500/20 text-green-700 dark:text-green-400'
-                        : 'bg-gray-500/20 text-gray-700 dark:text-gray-400'
-                    }
-                  >
-                    {patient.status}
+                  <Badge className="bg-blue-500/20 text-blue-700 dark:text-blue-400">
+                    {patient.address ? patient.address.split(',')[0] : 'No address'}
                   </Badge>
                 </div>
               ))}
@@ -125,71 +160,157 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Quick Stats */}
+        {/* Doctors */}
         <Card className="border-border/50">
           <CardHeader>
-            <CardTitle>Department Status</CardTitle>
-            <CardDescription>Bed occupancy overview</CardDescription>
+            <CardTitle>Doctors</CardTitle>
+            <CardDescription>Availability status</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {mockDepartments.slice(0, 4).map((dept) => {
-                const occupancyRate = Math.round((dept.bedsOccupied / dept.beds) * 100)
-                return (
-                  <div key={dept.id} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-foreground">
-                        {dept.name}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {occupancyRate}%
-                      </span>
-                    </div>
-                    <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          occupancyRate > 80
-                            ? 'bg-destructive'
-                            : occupancyRate > 60
-                            ? 'bg-yellow-500'
-                            : 'bg-green-500'
-                        }`}
-                        style={{ width: `${occupancyRate}%` }}
-                      />
-                    </div>
+              {doctors.slice(0, 5).map((doctor) => (
+                <div key={doctor.id} className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      {doctor.first_name} {doctor.last_name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {doctor.department_name ?? 'No department'} · {doctor.specialization}
+                    </p>
                   </div>
-                )
-              })}
+                  <Badge
+                    className={
+                      doctor.availability === 'available'
+                        ? 'bg-green-500/20 text-green-700 dark:text-green-400'
+                        : doctor.availability === 'busy'
+                        ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-400'
+                        : 'bg-gray-500/20 text-gray-700 dark:text-gray-400'
+                    }
+                  >
+                    {doctor.availability || 'Unknown'}
+                  </Badge>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Recent Activity */}
-      <Card className="border-border/50">
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-          <CardDescription>Latest system events and updates</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-1">
-            {[
-              { time: '10:45 AM', event: 'New patient John Smith admitted to Cardiology' },
-              { time: '10:30 AM', event: 'Dr. Michael Chen updated diagnosis for John Thompson' },
-              { time: '10:15 AM', event: 'Emma Wilson viewed patient medical history' },
-              { time: '10:00 AM', event: 'Dr. Sarah Williams cancelled appointment' },
-              { time: '9:45 AM', event: 'System backup completed successfully' },
-            ].map((item, i) => (
-              <div key={i} className="flex gap-4 py-3 border-b border-border/30 last:border-0">
-                <span className="text-xs text-muted-foreground whitespace-nowrap pt-1">
-                  {item.time}
-                </span>
-                <span className="text-sm text-foreground">{item.event}</span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Diagnoses */}
+        <Card className="lg:col-span-2 border-border/50">
+          <CardHeader>
+            <CardTitle>Recent Diagnoses</CardTitle>
+            <CardDescription>Latest diagnosis records</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {diagnoses.slice(0, 5).map((diagnosis) => (
+                <div
+                  key={diagnosis.id}
+                  className="flex items-start justify-between p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-foreground truncate">
+                      {diagnosis.description}
+                    </h3>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className="text-xs text-muted-foreground">
+                        {diagnosis.patient_name}
+                      </span>
+                      <span className="text-xs text-muted-foreground">•</span>
+                      <span className="text-xs text-muted-foreground">
+                        ICD: {diagnosis.icd_code}
+                      </span>
+                      <span className="text-xs text-muted-foreground">•</span>
+                      <span className="text-xs text-muted-foreground">
+                        Dr. {diagnosis.doctor_name}
+                      </span>
+                    </div>
+                  </div>
+                  <Badge
+                    className={
+                      diagnosis.severity === 'critical'
+                        ? 'bg-red-500/20 text-red-700 dark:text-red-400'
+                        : diagnosis.severity === 'medium'
+                        ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-400'
+                        : 'bg-green-500/20 text-green-700 dark:text-green-400'
+                    }
+                  >
+                    {diagnosis.severity}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Departments */}
+        <Card className="border-border/50">
+          <CardHeader>
+            <CardTitle>Departments</CardTitle>
+            <CardDescription>All active departments</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {departments.map((dept) => (
+                <div key={dept.id} className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{dept.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {dept.description ?? 'No description'}
+                    </p>
+                  </div>
+                  <Badge className="bg-blue-500/20 text-blue-700 dark:text-blue-400">
+                    id: {dept.id}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Audit Logs — Admin only */}
+      {user?.role === 'admin' && (
+        <Card className="border-border/50">
+          <CardHeader>
+            <CardTitle>Audit Logs</CardTitle>
+            <CardDescription>Recent system events</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1">
+              {auditLogs.slice(0, 5).map((log) => (
+                <div
+                  key={log.id}
+                  className="flex gap-4 py-3 border-b border-border/30 last:border-0"
+                >
+                  <span
+                    className={`text-xs font-semibold whitespace-nowrap pt-1 w-14 ${
+                      log.action === 'DELETE'
+                        ? 'text-red-500'
+                        : log.action === 'POST'
+                        ? 'text-green-500'
+                        : 'text-yellow-500'
+                    }`}
+                  >
+                    {log.action}
+                  </span>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap pt-1">
+                    {log.created_at ? new Date(log.created_at).toLocaleString() : 'N/A'}
+                  </span>
+                  <span className="text-sm text-foreground">
+                    {log.entity_type} #{log.entity_id}
+                    {log.new_values?.response?.email
+                      ? ` — ${log.new_values.response.email}`
+                      : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
